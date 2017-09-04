@@ -1,0 +1,89 @@
+Name:                fugacious
+Version:             0.1.0.3
+Synopsis:            Fugacious Email Server
+Description:         Fugacious Email Server
+Homepage:            https://github.com/jaspervdj/fugacious/
+License:             BSD3
+License-file:        LICENSE
+Author:              Jasper Van der Jeugt <m@jaspervdj.be>
+Maintainer:          Jasper Van der Jeugt <m@jaspervdj.be>
+Copyright:           2017 Jasper Van der Jeugt
+Category:            Web
+Build-type:          Simple
+Cabal-version:       >= 1.10
+
+Extra-source-files:
+  CHANGELOG.md
+  README.md
+
+Library
+  Hs-source-dirs:   lib
+  Default-language: Haskell2010
+  Ghc-options:      -Wall
+
+  Exposed-modules:
+    Data.ByteString.Char8.Extended
+    Data.MBox.Extended
+    Fugacious.Database
+    Fugacious.MailQueue
+    Fugacious.MailQueue.Amazon
+    Fugacious.MailQueue.Internal
+    Fugacious.MailQueue.Spool
+    Fugacious.Main.Sendmail
+    Fugacious.ParseMail
+    Fugacious.Logger
+    Fugacious.Main.Server
+    Fugacious.Web
+    Fugacious.Web.Views
+    Paths_fugacious
+    Snap.Core.Extended
+    System.FileLock.Extended
+
+  Build-depends:
+    aeson         >= 1.1  && < 1.2,
+    amazonka      >= 1.4  && < 1.5,
+    amazonka-sqs  >= 1.4  && < 1.5,
+    async         >= 2.1  && < 2.2,
+    base          >= 4    && < 5,
+    binary        >= 0.8  && < 0.9,
+    blaze-html    >= 0.9  && < 0.10,
+    bytestring    >= 0.10 && < 0.11,
+    directory     >= 1.3  && < 1.4,
+    exceptions    >= 0.8  && < 0.9,
+    fast-logger   >= 2.4  && < 2.5,
+    filelock      >= 0.1  && < 0.2,
+    filepath      >= 1.4  && < 1.5,
+    lens          >= 4.15 && < 4.16,
+    lifted-base   >= 0.2  && < 0.3,
+    mbox          >= 0.3  && < 0.4,
+    mtl           >= 2.2  && < 2.3,
+    random        >= 1.1  && < 1.2,
+    resource-pool >= 0.2  && < 0.3,
+    snap-blaze    >= 0.2  && < 0.3,
+    snap-core     >= 1.0  && < 1.1,
+    snap-server   >= 1.0  && < 1.1,
+    sqlite-simple >= 0.4  && < 0.5,
+    text          >= 1.2  && < 1.3,
+    time          >= 1.6  && < 1.7,
+    uuid          >= 1.3  && < 1.4,
+    yaml          >= 0.8  && < 0.9
+
+Executable fugacious-server
+  Main-is:             Main.hs
+  Hs-source-dirs:      src/fugacious-server
+  Ghc-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N"
+  Default-language:    Haskell2010
+
+  Build-depends:
+    base >= 4 && < 5,
+    fugacious
+
+Executable fugacious-sendmail
+  Main-is:             Main.hs
+  Ghc-options:         -Wall -threaded -rtsopts "-with-rtsopts=-N"
+  Hs-source-dirs:      src/fugacious-sendmail
+  Default-language:    Haskell2010
+
+  Build-depends:
+    base >= 4 && < 5,
+    fugacious

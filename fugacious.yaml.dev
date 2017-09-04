@@ -1,0 +1,14 @@
+database:
+  path: "fugacious.db"
+
+janitor:
+  interval: 120
+
+web:
+  port: 8000
+  domain: "localhost"
+  user_lifetime: 600
+
+mail_queues:
+  - type: spool
+    path: "/var/spool/mail/jasper"

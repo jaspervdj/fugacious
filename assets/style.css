@@ -1,0 +1,61 @@
+html {
+    font-family: sans-serif;
+    text-align: center;
+    font-size: 14px;
+}
+
+body {
+    margin: 36px auto 36px auto;
+    width: 640px;
+    text-align: left;
+}
+
+header {
+    border-bottom: 1px solid black;
+    font-size: 16px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+}
+
+header a {
+    text-decoration: none;
+    color: black;
+}
+
+footer {
+    border-top: 1px solid black;
+    font-size: 12px;
+    padding-top: 6px;
+    text-align: right;
+    margin-top: 6px;
+}
+
+h1 {
+    font-size: 16px;
+}
+
+form.login {
+    text-align: center;
+    margin: 24px;
+}
+
+form.logout {
+    float: right;
+}
+
+input {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+table {
+    border-spacing: 0px;
+}
+
+th {
+    padding: 0px 12px 6px 0px;
+}
+
+td {
+    padding: 0px 12px 3px 0px;
+}
