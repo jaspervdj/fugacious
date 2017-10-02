@@ -13,6 +13,7 @@ import qualified Data.Text                   as T
 import qualified Data.Time                   as Time
 import           Data.Version                (showVersion)
 import qualified Fugacious.Database          as Database
+import           Fugacious.ParseMail
 import qualified Paths_fugacious
 import           Text.Blaze.Html             (Html, (!))
 import qualified Text.Blaze.Html5            as H
@@ -83,11 +84,11 @@ inbox now user emails = template (Database.uAddress user <> " - fugacious") $ do
     minutes = floor $
         toRational (Database.uExpires user `Time.diffUTCTime` now) / 60
 
-mail :: Database.User -> Database.Mail -> Html
+mail :: Database.User -> ParsedMail -> Html
 mail user msg = template (Database.uAddress user <> " - fugacious") $ do
     H.p $ "Welcome " <> H.toHtml (Database.uAddress user)
     H.p $ do
-        H.toHtml (Database.mFrom msg)
+        H.toHtml (pmFrom msg)
         " - "
-        H.toHtml (Database.mSubject msg)
-    H.pre $ H.code $ H.toHtml $ Database.mSource msg
+        H.toHtml (pmSubject msg)
+    H.div $ H.a ! A.class_ "body" $ H.pre $ H.code $ H.toHtml $ pmBody msg

@@ -1,9 +1,6 @@
 database:
   path: "fugacious.db"
 
-janitor:
-  interval: 120
-
 web:
   port: 8000
   domain: "localhost"

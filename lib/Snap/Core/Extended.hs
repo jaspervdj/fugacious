@@ -6,6 +6,8 @@ module Snap.Core.Extended
     , requireParam
 
     , throw400
+    , throw500
+    , throwError
     ) where
 
 import qualified Data.ByteString    as B
@@ -35,8 +37,15 @@ requireParam key = do
             Just x  -> return x
 
 throw400 :: MonadSnap m => String -> m a
-throw400 reason = do
-    modifyResponse $ setResponseStatus 400 "User Error"
-    writeBS $ "400 error: " <> T.encodeUtf8 (T.pack reason)
+throw400 = throwError 400 "User Error"
+
+throw500 :: MonadSnap m => String -> m a
+throw500 = throwError 500 "Server Error"
+
+throwError :: MonadSnap m => Int -> String -> String -> m a
+throwError code message reason = do
+    modifyResponse $ setResponseStatus code $ T.encodeUtf8 $ T.pack message
+    writeBS $ T.encodeUtf8 $ T.pack $
+        show code ++ " " ++ message ++ ": " ++ reason
     r <- getResponse
     finishWith r

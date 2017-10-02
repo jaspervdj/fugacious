@@ -21,27 +21,26 @@ module Fugacious.Database
     , getMailByUser
     ) where
 
-import           Control.Exception       (Exception, catch, throwIO)
-import           Control.Monad           (replicateM)
-import qualified Data.Aeson              as Aeson
-import           Data.Maybe              (fromMaybe)
-import           Data.Monoid             ((<>))
-import           Data.Monoid             (Last (..))
-import qualified Data.Pool               as Pool
-import qualified Data.Text               as T
-import qualified Data.Time               as Time
-import qualified Data.UUID               as UUID
-import qualified Data.UUID.V4            as UUID
-import qualified Database.SQLite.Simple  as Sqlite
-import           System.Random           (randomRIO)
+import           Control.Exception      (Exception, catch, throwIO)
+import           Control.Monad          (replicateM)
+import qualified Data.Aeson             as Aeson
+import           Data.Maybe             (fromMaybe)
+import           Data.Monoid            (Last (..))
+import qualified Data.Pool              as Pool
+import qualified Data.Text              as T
+import qualified Data.Time              as Time
+import qualified Data.UUID              as UUID
+import qualified Data.UUID.V4           as UUID
+import qualified Database.SQLite.Simple as Sqlite
+import           System.Random          (randomRIO)
 
 data Error
-    = Constraint T.Text
-    | NotFound T.Text
+    = Constraint String
+    | NotFound String
 
 instance Show Error where
-    show (Constraint msg) = T.unpack msg
-    show (NotFound   msg) = T.unpack msg
+    show (Constraint msg) = msg
+    show (NotFound   msg) = msg
 
 instance Exception Error
 
@@ -137,7 +136,7 @@ createUser h address expires = do
             (\err -> case err of
                 Sqlite.SQLError {Sqlite.sqlError = Sqlite.ErrorConstraint} ->
                     throwIO $ Constraint $
-                        "The address " <> address <> " is already taken."
+                        "The address " ++ T.unpack address ++ " is already taken."
                 _ -> throwIO err)
 
 getUserById :: Handle -> T.Text -> IO User
@@ -148,7 +147,7 @@ getUserById h uuid = Pool.withResource (hPool h) $ \conn -> do
     case users of
         (user : _) -> return user
         []         -> throwIO $ NotFound $
-            "User " <> uuid <> " does not exist."
+            "User " ++ T.unpack uuid ++ " does not exist."
 
 getUserByAddress :: Handle -> T.Text -> IO User
 getUserByAddress h address = Pool.withResource (hPool h) $ \conn -> do
@@ -158,7 +157,7 @@ getUserByAddress h address = Pool.withResource (hPool h) $ \conn -> do
     case users of
         (user : _) -> return user
         []         -> throwIO $ NotFound $
-            "User " <> address <> " does not exist."
+            "User " ++ T.unpack address ++ " does not exist."
 
 getExpiredUsers :: Handle -> IO [User]
 getExpiredUsers h = Pool.withResource (hPool h) $ \conn -> do
@@ -215,7 +214,7 @@ getMailById h mId = Pool.withResource (hPool h) $ \conn -> do
     case mails of
         (mail : _) -> return mail
         []          -> throwIO $ NotFound $
-            "Email " <> mId <> " does not exist."
+            "Email " ++ T.unpack mId ++ " does not exist."
 
 getMailByUser :: Handle -> User -> IO [Mail]
 getMailByUser h user = Pool.withResource (hPool h) $ \conn -> do

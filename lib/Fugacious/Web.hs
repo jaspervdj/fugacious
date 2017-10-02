@@ -19,6 +19,7 @@ import qualified Data.Text.Encoding       as T
 import qualified Data.Time                as Time
 import qualified Fugacious.Database       as Database
 import qualified Fugacious.Logger         as Logger
+import qualified Fugacious.ParseMail      as ParseMail
 import qualified Fugacious.Web.Views      as Views
 import qualified Snap.Blaze               as Snap
 import           Snap.Core.Extended       (MonadSnap, Snap)
@@ -133,11 +134,14 @@ getInbox = handleExceptions $ do
 
 getInboxMail :: FugaciousM ()
 getInboxMail = handleExceptions $ do
-    user <- authorize
-    id_  <- Snap.requireParam "mail"
-    db   <- asks hDatabase
-    mail <- liftIO $ Database.getMailById db id_
-    Snap.blaze $ Views.mail user mail
+    user  <- authorize
+    id_   <- Snap.requireParam "mail"
+    db    <- asks hDatabase
+    mail  <- liftIO $ Database.getMailById db id_
+    pmail <- case ParseMail.parseMail (Database.mSource mail) of
+        Left  err -> Snap.throw500 $ "Could not parser mail: " ++ err
+        Right x   -> return x
+    Snap.blaze $ Views.mail user pmail
 
 authorize :: FugaciousM Database.User
 authorize = do
@@ -158,12 +162,6 @@ authorize = do
 handleExceptions :: MonadSnap m => m a -> m a
 handleExceptions action = catches action
     [ Handler $ \db -> case db of
-        Database.Constraint err -> exception 400 "Constraint Error" err
-        Database.NotFound   err -> exception 404 "Not Found"        err
+        Database.Constraint err -> Snap.throwError 400 "Constraint Error" err
+        Database.NotFound   err -> Snap.throwError 404 "Not Found"        err
     ]
-  where
-    exception code line body = do
-        Snap.modifyResponse $ Snap.setResponseStatus code (T.encodeUtf8 line)
-        Snap.blaze $ Views.exception code line body
-        r <- Snap.getResponse
-        Snap.finishWith r
