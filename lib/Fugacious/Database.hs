@@ -21,18 +21,20 @@ module Fugacious.Database
     , getMailByUser
     ) where
 
-import           Control.Exception      (Exception, catch, throwIO)
-import           Control.Monad          (replicateM)
-import qualified Data.Aeson             as Aeson
-import           Data.Maybe             (fromMaybe)
-import           Data.Monoid            (Last (..))
-import qualified Data.Pool              as Pool
-import qualified Data.Text              as T
-import qualified Data.Time              as Time
-import qualified Data.UUID              as UUID
-import qualified Data.UUID.V4           as UUID
-import qualified Database.SQLite.Simple as Sqlite
-import           System.Random          (randomRIO)
+import           Control.Exception                  (Exception, catch, throwIO)
+import           Control.Monad                      (replicateM, void)
+import qualified Data.Aeson                         as Aeson
+import           Data.Maybe                         (fromMaybe)
+import           Data.Monoid                        (Last (..))
+import qualified Data.Pool                          as Pool
+import qualified Data.Text                          as T
+import qualified Data.Text.Encoding                 as T
+import qualified Data.Time                          as Time
+import qualified Data.UUID                          as UUID
+import qualified Data.UUID.V4                       as UUID
+import qualified Database.PostgreSQL.Simple         as Postgres
+import qualified Database.PostgreSQL.Simple.FromRow as Postgres
+import           System.Random                      (randomRIO)
 
 data Error
     = Constraint String
@@ -45,7 +47,7 @@ instance Show Error where
 instance Exception Error
 
 data Config = Config
-    { cPath :: Last FilePath
+    { cConnectionString :: Last T.Text
     } deriving (Show)
 
 instance Monoid Config where
@@ -54,18 +56,18 @@ instance Monoid Config where
 
 instance Aeson.FromJSON Config where
     parseJSON = Aeson.withObject "FromJSON Config" $ \o ->
-        Config <$> o Aeson..: "path"
+        Config <$> o Aeson..: "connection_string"
 
 data Handle = Handle
     { hConfig :: Config
-    , hPool   :: Pool.Pool Sqlite.Connection
+    , hPool   :: Pool.Pool Postgres.Connection
     }
 
 withHandle :: Config -> (Handle -> IO a) -> IO a
 withHandle config f = do
     pool <- Pool.createPool
-        (Sqlite.open path)
-        Sqlite.close
+        (Postgres.connectPostgreSQL $ T.encodeUtf8 connString)
+        Postgres.close
         1   -- Number of sub-pools
         30  -- Seconds to keep a resource open
         4   -- Number of resources per sub-pool
@@ -78,21 +80,21 @@ withHandle config f = do
     Pool.destroyAllResources pool
     return x
   where
-    path = fromMaybe "fugacious.db" $ getLast $ cPath config
+    connString = fromMaybe "" $ getLast $ cConnectionString config
 
 createTables :: Handle -> IO ()
 createTables h = do
     Pool.withResource (hPool h) $ \conn -> do
-        Sqlite.execute_ conn
+        void $ Postgres.execute_ conn
             "CREATE TABLE IF NOT EXISTS users ( \
             \    id TEXT PRIMARY KEY NOT NULL, \
             \    address TEXT NOT NULL, \
             \    token TEXT NOT NULL, \
-            \    expires TEXT NOT NULL \
+            \    expires TIMESTAMPTZ NOT NULL \
             \)"
-        Sqlite.execute_ conn
+        void $ Postgres.execute_ conn
             "CREATE UNIQUE INDEX IF NOT EXISTS users_address ON users(address)"
-        Sqlite.execute_ conn
+        void $ Postgres.execute_ conn
             "CREATE TABLE IF NOT EXISTS mails ( \
             \    id TEXT PRIMARY KEY NOT NULL, \
             \    \"from\" TEXT NOT NULL, \
@@ -100,7 +102,7 @@ createTables h = do
             \    subject TEXT NOT NULL, \
             \    source TEXT NOT NULL \
             \)"
-        Sqlite.execute_ conn
+        void $ Postgres.execute_ conn
             "CREATE UNIQUE INDEX IF NOT EXISTS mails_to ON mails(id, \"to\")"
 
 data User = User
@@ -110,9 +112,12 @@ data User = User
     , uExpires :: Time.UTCTime
     } deriving (Show)
 
-instance Sqlite.FromRow User where
-    fromRow =
-        User <$> Sqlite.field <*> Sqlite.field <*> Sqlite.field <*> Sqlite.field
+instance Postgres.FromRow User where
+    fromRow = User
+        <$> Postgres.field
+        <*> Postgres.field
+        <*> Postgres.field
+        <*> Postgres.field
 
 genToken :: IO T.Text
 genToken = do
@@ -128,22 +133,20 @@ createUser h address expires = do
     token <- genToken
     Pool.withResource (hPool h) $ \conn ->
         catch (do
-            Sqlite.execute conn
+            void $ Postgres.execute conn
                 "INSERT INTO users (id, address, token, expires) \
                 \VALUES (?, ?, ?, ?)"
                 (uuid, address, token, expires)
             return $ User uuid address token expires)
             (\err -> case err of
-                Sqlite.SQLError {Sqlite.sqlError = Sqlite.ErrorConstraint} ->
-                    throwIO $ Constraint $
-                        "The address " ++ T.unpack address ++ " is already taken."
-                _ -> throwIO err)
+                Postgres.SqlError {..} -> throwIO $ Constraint $
+                    "The address " ++ T.unpack address ++ " is already taken.")
 
 getUserById :: Handle -> T.Text -> IO User
 getUserById h uuid = Pool.withResource (hPool h) $ \conn -> do
-    users <- Sqlite.query conn
+    users <- Postgres.query conn
         "SELECT id, address, token, expires FROM users WHERE id = ?"
-        (Sqlite.Only uuid)
+        (Postgres.Only uuid)
     case users of
         (user : _) -> return user
         []         -> throwIO $ NotFound $
@@ -151,9 +154,9 @@ getUserById h uuid = Pool.withResource (hPool h) $ \conn -> do
 
 getUserByAddress :: Handle -> T.Text -> IO User
 getUserByAddress h address = Pool.withResource (hPool h) $ \conn -> do
-    users <- Sqlite.query conn
+    users <- Postgres.query conn
         "SELECT id, address, token, expires FROM users WHERE address = ?"
-        (Sqlite.Only address)
+        (Postgres.Only address)
     case users of
         (user : _) -> return user
         []         -> throwIO $ NotFound $
@@ -162,16 +165,16 @@ getUserByAddress h address = Pool.withResource (hPool h) $ \conn -> do
 getExpiredUsers :: Handle -> IO [User]
 getExpiredUsers h = Pool.withResource (hPool h) $ \conn -> do
     now   <- Time.getCurrentTime
-    Sqlite.query conn
+    Postgres.query conn
         "SELECT id, address, token, expires FROM users WHERE expires < ?"
-        (Sqlite.Only now)
+        (Postgres.Only now)
 
 purgeUser :: Handle -> User -> IO ()
 purgeUser h user = Pool.withResource (hPool h) $ \conn -> do
-    Sqlite.execute conn
-        "DELETE FROM users WHERE id = ?" (Sqlite.Only (uId user))
-    Sqlite.execute conn
-        "DELETE FROM mails WHERE \"to\" = ?" (Sqlite.Only (uAddress user))
+    void $ Postgres.execute conn
+        "DELETE FROM users WHERE id = ?" (Postgres.Only (uId user))
+    void $ Postgres.execute conn
+        "DELETE FROM mails WHERE \"to\" = ?" (Postgres.Only (uAddress user))
 
 data Mail = Mail
     { mId      :: T.Text
@@ -181,13 +184,13 @@ data Mail = Mail
     , mSource  :: T.Text
     } deriving (Show)
 
-instance Sqlite.FromRow Mail where
+instance Postgres.FromRow Mail where
     fromRow = Mail
-        <$> Sqlite.field
-        <*> Sqlite.field
-        <*> Sqlite.field
-        <*> Sqlite.field
-        <*> Sqlite.field
+        <$> Postgres.field
+        <*> Postgres.field
+        <*> Postgres.field
+        <*> Postgres.field
+        <*> Postgres.field
 
 deliverMail
     :: Handle
@@ -200,7 +203,7 @@ deliverMail h mFrom mTo mSubject mSource = do
     _user <- getUserByAddress h mTo
     mId   <- UUID.toText <$> UUID.nextRandom
     Pool.withResource (hPool h) $ \conn -> do
-        Sqlite.execute conn
+        void $ Postgres.execute conn
             "INSERT INTO mails (id, \"from\", \"to\", subject, source) \
             \VALUES (?, ?, ?, ?, ?)"
             (mId, mFrom, mTo, mSubject, mSource)
@@ -208,9 +211,9 @@ deliverMail h mFrom mTo mSubject mSource = do
 
 getMailById :: Handle -> T.Text -> IO Mail
 getMailById h mId = Pool.withResource (hPool h) $ \conn -> do
-    mails <- Sqlite.query conn
+    mails <- Postgres.query conn
         "SELECT id, \"from\", \"to\", subject, source \
-        \FROM mails WHERE id = ?" (Sqlite.Only mId)
+        \FROM mails WHERE id = ?" (Postgres.Only mId)
     case mails of
         (mail : _) -> return mail
         []          -> throwIO $ NotFound $
@@ -218,6 +221,6 @@ getMailById h mId = Pool.withResource (hPool h) $ \conn -> do
 
 getMailByUser :: Handle -> User -> IO [Mail]
 getMailByUser h user = Pool.withResource (hPool h) $ \conn -> do
-    Sqlite.query conn
+    Postgres.query conn
         "SELECT id, \"from\", \"to\", subject, source \
-        \FROM mails WHERE \"to\" = ?" (Sqlite.Only (uAddress user))
+        \FROM mails WHERE \"to\" = ?" (Postgres.Only (uAddress user))

@@ -1,5 +1,5 @@
 database:
-  path: "fugacious.db"
+  connection_string: "dbname='fugacious'"
 
 web:
   port: 8000
