@@ -1,0 +1,187 @@
+export
+    type AppCluster
+    new
+
+import Fugue.AWS
+import Fugue.AWS.AutoScaling
+import Fugue.AWS.EC2
+import Fugue.AWS.ECS
+import Fugue.AWS.ELB
+import Fugue.AWS.IAM
+import Fugue.AWS.Pattern.Network
+import Fugue.Core.Vars
+
+type AppCluster: {
+  cluster: Fugue.AWS.ECS.Cluster,
+  services: List<Fugue.AWS.ECS.Service>,
+  asg: Fugue.AWS.AutoScaling.AutoScalingGroup
+}
+
+fun new {
+  name: String,
+  region: Fugue.AWS.Region,
+  network: Fugue.AWS.Pattern.Network.Network,
+  containerImage: String,
+  containerMemory: Optional<Int>,
+  containerManagedPolicies: List<Fugue.AWS.IAM.ManagedPolicy>,
+  containerLogGroupName: String,
+} -> AppCluster:
+  # Security group for the cluster instances
+  let sg: Fugue.AWS.EC2.SecurityGroup.new {
+    vpc: network.vpc,
+    description: "ECS Cluster Container Instances",
+    ipPermissions: [
+      Fugue.AWS.EC2.IpPermission.http(
+        Fugue.AWS.EC2.IpPermission.Target.all
+      )
+    ],
+  }
+
+  # Load balancer for the cluster instances
+  let elb: Fugue.AWS.ELB.LoadBalancer.new {
+    loadBalancerName: name ++ "-web",
+    subnets: network.publicSubnets,
+    healthCheck: Fugue.AWS.ELB.HealthCheck.tcp {
+      port: 80,
+      interval: 15,
+      timeout: 3,
+      unhealthyThreshold: 3,
+      healthyThreshold: 3,
+    },
+    securityGroups: [sg],
+    scheme: Fugue.AWS.ELB.InternetFacing,
+    listeners: [
+      Fugue.AWS.ELB.Listener.new {
+        protocol: Fugue.AWS.ELB.HTTP,
+        loadBalancerPort: 80,
+        instanceProtocol: Fugue.AWS.ELB.HTTP,
+        instancePort: 80,
+      },
+    ],
+  }
+
+  # Container definition for the instances running the webapp
+  let containerName: name ++ "-container"
+  let containerDefinition: Fugue.AWS.ECS.ContainerDefinition.new {
+    name: containerName,
+    image: containerImage,
+    memory: containerMemory ?| 256,
+    portMappings: [
+      Fugue.AWS.ECS.PortMapping.tcp {
+        containerPort: 80,
+        hostPort: 80
+      }
+    ],
+    # The awslogs smart constructor is currently not exported so we need to use
+    # the core type here.
+    logConfiguration: Fugue.AWS.ECS.LogConfiguration {
+      logDriver: Fugue.AWS.ECS.Awslogs,
+      options: {
+        "awslogs-region": Fugue.AWS.Region.toString(region),
+        "awslogs-group": containerLogGroupName
+      }
+    }
+  }
+
+  # Task running the containers
+  let task: Fugue.AWS.ECS.TaskDefinition.new {
+    family: name ++ "-task",
+    containerDefinitions: [containerDefinition],
+    region: region
+  }
+
+  # Cluster to hold the containers
+  let clusterName: name ++ "-cluster"
+  let cluster: Fugue.AWS.ECS.Cluster.new {
+    name: clusterName,
+    region: region
+  }
+
+  # Role for the service.
+  let serviceRole: Fugue.AWS.IAM.Role.new {
+    roleName: name ++ "-service-role",
+    assumeRolePolicyDocument: '{
+      \  "Version": "2008-10-17",
+      \  "Statement": [
+      \    {
+      \      "Sid": "",
+      \      "Effect": "Allow",
+      \      "Principal": {
+      \        "Service": "ecs.amazonaws.com"
+      \      },
+      \      "Action": "sts:AssumeRole"
+      \    }
+      \  ]
+      \}',
+    managedPolicies: [
+      Fugue.AWS.IAM.ManagedPolicy.external(
+        "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole"
+      ),
+    ]
+  }
+
+  # Role for the clusters
+  let clusterInstanceRole: Fugue.AWS.IAM.Role.new {
+    roleName: name ++ "-instance-role",
+    assumeRolePolicyDocument: Fugue.AWS.IAM.Policy.AssumeRole.ec2,
+    managedPolicies: List.concat(
+      [
+        Fugue.AWS.IAM.ManagedPolicy.external(
+          "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
+        )
+      ],
+      containerManagedPolicies
+    )
+  }
+
+  let service: Fugue.AWS.ECS.Service.new {
+    name: name ++ "-service",
+    cluster: cluster,
+    taskDefinition: task,
+    numDesired: 1,
+    role: serviceRole,
+    loadBalancer: Fugue.AWS.ECS.LoadBalancer.classicLoadBalancer {
+      containerName: containerName,
+      containerPort: 80,
+      loadBalancer: elb
+    },
+    deploymentConfiguration: Fugue.AWS.ECS.DeploymentConfiguration {
+      minimumHealthyPercent: 60,
+      maximumPercent: 150
+    }
+  }
+
+  let lc: Fugue.AWS.AutoScaling.LaunchConfiguration.new {
+    # ECS-optimized image.
+    image: "ami-ec33cc96",
+    securityGroups: [sg],
+    instanceType: Fugue.AWS.EC2.T2_micro,
+    iamInstanceProfile: Fugue.AWS.IAM.InstanceProfile.new {
+      instanceProfileName: name ++ "profile",
+      roles: [clusterInstanceRole]
+    },
+    userData: Template.render {
+      data: {cluster: clusterName},
+      template:
+        '#!/bin/bash
+        \echo ECS_CLUSTER={{cluster}} >> /etc/ecs/ecs.config
+        \'
+    }
+  }
+
+  let asg: Fugue.AWS.AutoScaling.AutoScalingGroup.new {
+    name: name ++ "-asg",
+    launchConfiguration: lc,
+    subnets: network.privateSubnets,
+    loadBalancers: [],
+    minSize: 2,
+    maxSize: 2,
+    defaultCooldown: 300,
+    healthCheckType: Fugue.AWS.AutoScaling.Ec2
+  }
+
+  {
+    cluster: cluster,
+    services: [service],
+    asg: asg
+  }

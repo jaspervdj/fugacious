@@ -1,0 +1,106 @@
+composition
+
+import Fugue.AWS
+import Fugue.AWS.AutoScaling
+import Fugue.AWS.EC2
+import Fugue.AWS.ECS
+import Fugue.AWS.ELB
+import Fugue.AWS.ELBv2
+import Fugue.AWS.IAM
+import Fugue.AWS.Pattern.Network
+import Fugue.AWS.RDS
+import Fugue.AWS.SNS
+import Fugue.AWS.SQS
+import Fugue.Core.Vars
+import NotificationQueue
+import AppCluster
+
+type Fugacious: {
+  queue: NotificationQueue.NotificationQueue,
+  network: Fugue.AWS.Pattern.Network.Network,
+  database: Fugue.AWS.RDS.DBInstance,
+  cluster: AppCluster.AppCluster
+}
+
+fun newFugacious {
+  name: String,
+  containerLogGroupName: String,
+  region: Optional<Fugue.AWS.Region>,
+} -> Fugacious:
+  let _region: region ?| Fugue.AWS.Us-east-1
+
+  let network: Fugue.AWS.Pattern.Network.new {
+    name: name ++ "-network",
+    cidr: "10.42.0.0/16",
+    region: _region,
+    publicSubnets: [
+      (Fugue.AWS.B, "10.42.12.0/24"),
+      (Fugue.AWS.C, "10.42.13.0/24")
+    ],
+    privateSubnets: [
+      (Fugue.AWS.B, "10.42.22.0/24"),
+      (Fugue.AWS.C, "10.42.23.0/24")
+    ],
+    # These options are important for ECS to be able to pick up instances
+    enableNat: True,
+    enableDnsSupport: True,
+    enableDnsHostnames: True
+  }
+
+  let database: Fugue.AWS.RDS.DBInstance.new {
+    dbInstanceIdentifier: name ++ "-database",
+    dbInstanceClass: Fugue.AWS.RDS.DB_T2_MICRO,
+    engine: Fugue.AWS.RDS.Postgres,
+    masterUsername: "master",
+    dbName: "fugacious",
+    allocatedStorage: 2048,
+    securityGroups: [
+      Fugue.AWS.EC2.SecurityGroup.new {
+        description: "database security group",
+        ipPermissions: [
+          Fugue.AWS.EC2.IpPermission.postgresql(
+            Fugue.AWS.EC2.IpPermission.Target.all
+          )
+        ],
+        vpc: network.vpc
+      }
+    ],
+    availabilityZone: None,
+    dbSubnetGroup: Fugue.AWS.RDS.DBSubnetGroup.new {
+      name: name ++ "-database-private",
+      description: "database private subnet",
+      subnets: network.privateSubnets,
+    },
+    multiAZ: True,
+    port: 5432,
+    masterUserPassword: Fugue.Core.Vars.PlainText {password: "12345678"},
+  }
+
+  let cluster: AppCluster.new {
+    name: name ++ "-cluster",
+    region: _region,
+    network: network,
+    containerImage: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",
+    containerManagedPolicies: [
+      Fugue.AWS.IAM.ManagedPolicy.external(
+        "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
+      )
+    ],
+    containerLogGroupName: containerLogGroupName,
+  }
+
+  {
+    queue: NotificationQueue.new {
+      topicName: name ++ "-topic",
+      queueName: name ++ "-queue",
+      region: _region
+    },
+    network: network,
+    database: database,
+    cluster: cluster
+  }
+
+infra: newFugacious {
+  name: "fgcs2",
+  containerLogGroupName: "fgcs2-logs"
+}

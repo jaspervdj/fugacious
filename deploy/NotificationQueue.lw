@@ -1,0 +1,39 @@
+# Create a queue, a topic, and subscribe the queue to that topic.
+
+export
+    type NotificationQueue
+    new
+
+import Fugue.AWS
+import Fugue.AWS.SNS
+import Fugue.AWS.SQS
+
+type NotificationQueue: {
+  topic: Fugue.AWS.SNS.Topic,
+  queue: Fugue.AWS.SQS.Queue,
+  subscription: Fugue.AWS.SNS.Subscription
+}
+
+fun new {
+  topicName: String,
+  queueName: String,
+  region: Fugue.AWS.Region,
+} -> NotificationQueue:
+  let topic: Fugue.AWS.SNS.Topic.new {
+    name: topicName,
+    region: region
+  }
+
+  let queue: Fugue.AWS.SQS.Queue.new {
+    name: queueName,
+    region: region
+  }
+
+  {
+    topic: topic,
+    queue: queue,
+    subscription: Fugue.AWS.SNS.Subscription.new {
+      endpoint: Fugue.AWS.SNS.Sqs(queue),
+      topic: topic
+    }
+  }
