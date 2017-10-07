@@ -33,8 +33,12 @@ fun new {
     ipPermissions: [
       Fugue.AWS.EC2.IpPermission.http(
         Fugue.AWS.EC2.IpPermission.Target.all
+      ),
+      Fugue.AWS.EC2.IpPermission.tcp(
+        8000,
+        Fugue.AWS.EC2.IpPermission.Target.all
       )
-    ],
+    ]
   }
 
   # Load balancer for the cluster instances
@@ -42,7 +46,7 @@ fun new {
     loadBalancerName: name ++ "-web",
     subnets: network.publicSubnets,
     healthCheck: Fugue.AWS.ELB.HealthCheck.tcp {
-      port: 80,
+      port: 8000,
       interval: 15,
       timeout: 3,
       unhealthyThreshold: 3,
@@ -55,7 +59,7 @@ fun new {
         protocol: Fugue.AWS.ELB.HTTP,
         loadBalancerPort: 80,
         instanceProtocol: Fugue.AWS.ELB.HTTP,
-        instancePort: 80,
+        instancePort: 8000,
       },
     ],
   }
@@ -68,8 +72,8 @@ fun new {
     memory: containerMemory ?| 256,
     portMappings: [
       Fugue.AWS.ECS.PortMapping.tcp {
-        containerPort: 80,
-        hostPort: 80
+        containerPort: 8000,
+        hostPort: 8000
       }
     ],
     # The awslogs smart constructor is currently not exported so we need to use
@@ -142,7 +146,7 @@ fun new {
     role: serviceRole,
     loadBalancer: Fugue.AWS.ECS.LoadBalancer.classicLoadBalancer {
       containerName: containerName,
-      containerPort: 80,
+      containerPort: 8000,
       loadBalancer: elb
     },
     deploymentConfiguration: Fugue.AWS.ECS.DeploymentConfiguration {

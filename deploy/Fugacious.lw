@@ -77,7 +77,7 @@ fun newFugacious {
   }
 
   let cluster: AppCluster.new {
-    name: name ++ "-cluster",
+    name: name ++ "-app",
     region: _region,
     network: network,
     containerImage: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",

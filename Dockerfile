@@ -18,6 +18,6 @@ USER fugacious
 ENV USER fugacious
 WORKDIR /home/fugacious
 
-EXPOSE 80
+EXPOSE 8000
 
 CMD fugacious-server fugacious.yaml

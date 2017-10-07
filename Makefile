@@ -8,7 +8,7 @@ default:
 	cp $(shell stack exec which fugacious-sendmail) bin
 	docker build -t fugacious .
 
-deploy:
+push:
 	# Log into ECR and create repository
 	$(shell aws ecr get-login --region us-east-1 --no-include-email)
 	-aws ecr create-repository --repository-name fugacious

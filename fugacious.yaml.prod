@@ -1,14 +1,14 @@
 database:
-  path: "fugacious.db"
+  connection_string: "host=fgcs2-database.csrfbk8qsfyx.us-east-1.rds.amazonaws.com port=5432 dbname=fugacious user=master password=12345678"
 
 janitor:
   interval: 120
 
 web:
   port: 8000
-  domain: "kilobit.ch"
+  domain: "www.kilobit.ch"
   user_lifetime: 600
 
 mail_queues:
   - type: amazon
-    queue_url: "https://sqs.us-east-1.amazonaws.com/622401240280/fugacious-incoming-queue"
+    queue_url: "https://sqs.us-east-1.amazonaws.com/622401240280/fgcs2-queue"
