@@ -1,7 +1,8 @@
-FROM "ubuntu:16.04"
+FROM "ubuntu:17.04"
 MAINTAINER Jasper Van der Jeugt version: 0.1
 
 RUN apt-get update
+RUN apt-get install -y postgresql-server-dev-all
 RUN apt-get install -y libgmp-dev
 RUN apt-get install -y libnss3 libnss-lwres libnss-mdns ca-certificates netbase
 
@@ -17,6 +18,6 @@ USER fugacious
 ENV USER fugacious
 WORKDIR /home/fugacious
 
-EXPOSE 8000
+EXPOSE 80
 
 CMD fugacious-server fugacious.yaml
