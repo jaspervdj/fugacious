@@ -3,7 +3,8 @@ database:
 
 web:
   port: 8000
-  domain: "localhost"
+  mail_domain: "localhost"
+  web_domain: "localhost"
   user_lifetime: 600
 
 mail_queues:

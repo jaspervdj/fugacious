@@ -6,7 +6,8 @@ janitor:
 
 web:
   port: 8000
-  domain: "www.kilobit.ch"
+  mail_domain: "kilobit.ch"
+  web_domain: "www.kilobit.ch"
   user_lifetime: 600
 
 mail_queues:

@@ -29,22 +29,25 @@ import qualified Snap.Util.FileServe      as Snap
 
 data Config = Config
     { cPort         :: Last Int
-    , cDomain       :: Last T.Text
+    , cMailDomain   :: Last T.Text
+    , cWebDomain    :: Last T.Text
     , cUserLifetime :: Last Int
     } deriving (Show)
 
 instance Monoid Config where
-    mempty        = Config mempty mempty mempty
+    mempty        = Config mempty mempty mempty mempty
     mappend c1 c2 = Config
         { cPort         = cPort         c1 <> cPort         c2
-        , cDomain       = cDomain       c1 <> cDomain       c2
+        , cMailDomain   = cMailDomain   c1 <> cMailDomain   c2
+        , cWebDomain    = cWebDomain    c1 <> cWebDomain    c2
         , cUserLifetime = cUserLifetime c1 <> cUserLifetime c2
         }
 
 instance A.FromJSON Config where
     parseJSON = A.withObject "FromJSON Fugacious.Web.Config" $ \o -> Config
         <$> o A..: "port"
-        <*> o A..: "domain"
+        <*> o A..: "mail_domain"
+        <*> o A..: "web_domain"
         <*> o A..: "user_lifetime"
 
 data Handle = Handle
@@ -60,8 +63,11 @@ withHandle
 withHandle config logger database f =
     f $ Handle config logger database
 
-askDomain :: FugaciousM T.Text
-askDomain = asks $ fromMaybe "localhost" . getLast . cDomain . hConfig
+askMailDomain :: FugaciousM T.Text
+askMailDomain = asks $ fromMaybe "localhost" . getLast . cMailDomain . hConfig
+
+askWebDomain :: FugaciousM T.Text
+askWebDomain = asks $ fromMaybe "localhost" . getLast . cWebDomain . hConfig
 
 askUserLifetime :: FugaciousM Int
 askUserLifetime = asks $ fromMaybe 600 . getLast . cUserLifetime . hConfig
@@ -89,26 +95,27 @@ app = Snap.route
 
 index :: FugaciousM ()
 index = handleExceptions $ do
-    domain <- askDomain
-    Snap.blaze $ Views.index domain
+    webDomain <- askWebDomain
+    Snap.blaze $ Views.index webDomain
 
 postUsers :: FugaciousM ()
 postUsers = handleExceptions $ do
-    address  <- Snap.requireParam "address"
-    domain   <- askDomain
-    lifetime <- askUserLifetime
-    db       <- asks hDatabase
+    address    <- Snap.requireParam "address"
+    webDomain  <- askWebDomain
+    mailDomain <- askMailDomain
+    lifetime   <- askUserLifetime
+    db         <- asks hDatabase
 
     now <- liftIO Time.getCurrentTime
     let expires = Time.addUTCTime (fromIntegral lifetime) now
 
-    user <- liftIO $ Database.createUser db (address <> "@" <> domain) expires
+    user <- liftIO $ Database.createUser db (address <> "@" <> mailDomain) expires
 
     let cookie = Snap.Cookie
             { Snap.cookieName     = "user"
             , Snap.cookieValue    = T.encodeUtf8 (Database.uToken user)
             , Snap.cookieExpires  = Nothing
-            , Snap.cookieDomain   = Just (T.encodeUtf8 domain)
+            , Snap.cookieDomain   = Just (T.encodeUtf8 webDomain)
             , Snap.cookiePath     = Just "/"
             , Snap.cookieSecure   = False
             , Snap.cookieHttpOnly = False
