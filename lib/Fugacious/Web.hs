@@ -95,8 +95,8 @@ app = Snap.route
 
 index :: FugaciousM ()
 index = handleExceptions $ do
-    webDomain <- askWebDomain
-    Snap.blaze $ Views.index webDomain
+    mailDomain <- askMailDomain
+    Snap.blaze $ Views.index mailDomain
 
 postUsers :: FugaciousM ()
 postUsers = handleExceptions $ do
