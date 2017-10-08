@@ -16,6 +16,7 @@ import           Control.Monad                (forM_)
 import           Control.Monad.Trans          (liftIO)
 import qualified Data.Aeson                   as A
 import qualified Data.Binary.Builder          as Builder
+import           Data.Monoid                  ((<>))
 import qualified Data.Text                    as T
 import qualified Data.Text.Lazy               as TL
 import qualified Data.Text.Lazy.Encoding      as TL
@@ -42,6 +43,7 @@ withHandle config logger f = do
 popWith :: Config -> Logger.Handle -> Aws.Env -> DeliverMail -> IO ()
 popWith config logger env deliver = do
     Aws.runResourceT $ Aws.runAWS (env & Aws.envLogger .~ awsLogger) $ do
+        liftIO $ Logger.debug logger $ "Popping from " <> queueUrl <> "..."
         response <- Aws.send $ Aws.Sqs.receiveMessage queueUrl
         forM_ (response ^. Aws.Sqs.rmrsMessages) $ \message -> do
             -- Parse and deliver.
@@ -53,6 +55,7 @@ popWith config logger env deliver = do
             case message ^. Aws.Sqs.mReceiptHandle of
                 Nothing      -> return ()
                 Just receipt -> do
+                    liftIO $ Logger.debug logger $ "Deleting " <> receipt
                     _ <- Aws.send $ Aws.Sqs.deleteMessage queueUrl receipt
                     return ()
   where

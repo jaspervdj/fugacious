@@ -15,6 +15,7 @@ type NotificationQueue: {
 }
 
 fun new {
+  account: String,
   topicName: String,
   queueName: String,
   region: Fugue.AWS.Region,
@@ -26,7 +27,35 @@ fun new {
 
   let queue: Fugue.AWS.SQS.Queue.new {
     name: queueName,
-    region: region
+    region: region,
+    # In addition to just creating the subscription, we also need to set
+    # permissions on the queue to allow the topic to publish to this queue.
+    policy: Template.render {
+      template: '{
+        \  "Version": "2012-10-17",
+        \  "Statement": [
+        \    {
+        \      "Effect": "Allow",
+        \      "Principal": {
+        \        "AWS": "*"
+        \      },
+        \      "Action": "SQS:SendMessage",
+        \      "Resource": "arn:aws:sqs:{{region}}:{{account}}:{{queue}}",
+        \      "Condition": {
+        \        "ArnEquals": {
+        \          "aws:SourceArn": "arn:aws:sns:{{region}}:{{account}}:{{topic}}"
+        \        }
+        \      }
+        \    }
+        \  ]
+        \}',
+      data: {
+        account: account,
+        topic: topicName,
+        queue: queueName,
+        region: Fugue.AWS.Region.toString(region)
+      }
+    }
   }
 
   {

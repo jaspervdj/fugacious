@@ -24,6 +24,7 @@ type Fugacious: {
 
 fun newFugacious {
   name: String,
+  account: String,
   appLogGroupName: String,
   region: Optional<Fugue.AWS.Region>,
 } -> Fugacious:
@@ -93,7 +94,8 @@ fun newFugacious {
     queue: NotificationQueue.new {
       topicName: name ++ "-topic",
       queueName: name ++ "-queue",
-      region: _region
+      region: _region,
+      account: account
     },
     network: network,
     database: database,
@@ -102,5 +104,6 @@ fun newFugacious {
 
 infra: newFugacious {
   name: "fgcs2",
+  account: "622401240280",
   appLogGroupName: "fgcs2-logs"
 }

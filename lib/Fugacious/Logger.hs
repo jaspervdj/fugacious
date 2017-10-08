@@ -1,34 +1,63 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 module Fugacious.Logger
-    ( Config (..)
+    ( Verbosity (..)
+    , Config (..)
     , Handle
     , withHandle
 
-    , error
+    , debug
     , info
+    , warning
+    , error
+
+    , debug'
+    , info'
+    , warning'
+    , error'
     ) where
 
-import           Control.Exception       (bracket)
-import qualified Data.Aeson              as A
-import           Data.Monoid             (Last (..))
-import           Prelude                 hiding (error)
-import qualified System.Log.FastLogger   as FL
+import           Control.Exception     (bracket)
+import qualified Data.Aeson            as A
+import           Data.Maybe            (fromMaybe)
+import           Data.Monoid           (Last (..), (<>))
+import qualified Data.Text             as T
+import           Prelude               hiding (error, log)
+import qualified System.Log.FastLogger as FL
+
+data Verbosity
+    = Debug
+    | Info
+    | Warning
+    | Error
+    deriving (Eq, Ord, Show)
+
+instance A.FromJSON Verbosity where
+    parseJSON = A.withText "FromJSON Fugacious.Logger.Verbosity" $ \t ->
+        case t of
+            "debug"   -> pure Debug
+            "info"    -> pure Info
+            "warning" -> pure Warning
+            "error"   -> pure Error
+            _         -> fail $ "Unknown verbosity: " ++ T.unpack t
 
 data Config = Config
-    { cPath :: Last FilePath
+    { cPath      :: Last FilePath
+    , cVerbosity :: Last Verbosity
     } deriving (Show)
 
 instance Monoid Config where
-    mempty                      = Config mempty
-    Config l `mappend` Config r = Config (l `mappend` r)
+    mempty                              = Config mempty mempty
+    Config p0 v0 `mappend` Config p1 v1 = Config (p0 <> p1) (v0 <> v1)
 
 instance A.FromJSON Config where
-    parseJSON = A.withObject "FromJSON Fugacious.Logger.Config" $ \o ->
-        Config <$> o A..: "path"
+    parseJSON = A.withObject "FromJSON Fugacious.Logger.Config" $ \o -> Config
+        <$> o A..: "path"
+        <*> o A..: "verbosity"
 
 data Handle = Handle
-    { hLoggerSet :: FL.LoggerSet
+    { hConfig    :: Config
+    , hLoggerSet :: FL.LoggerSet
     }
 
 withHandle :: Config -> (Handle -> IO a) -> IO a
@@ -38,10 +67,23 @@ withHandle config f = bracket
         Just "-"  -> FL.newStderrLoggerSet FL.defaultBufSize
         Just path -> FL.newFileLoggerSet FL.defaultBufSize path)
     FL.rmLoggerSet
-    (\l -> f Handle {hLoggerSet = l})
+    (\l -> f Handle {hConfig = config, hLoggerSet = l})
 
-error :: FL.ToLogStr str => Handle -> str -> IO ()
-error h = FL.pushLogStrLn (hLoggerSet h) . FL.toLogStr
+log :: FL.ToLogStr s => Handle -> Verbosity -> s -> IO ()
+log Handle {..} v x
+    | v >= verbosity = FL.pushLogStrLn hLoggerSet $ FL.toLogStr x
+    | otherwise      = return ()
+  where
+    verbosity = fromMaybe Debug (getLast $ cVerbosity hConfig)
 
-info :: FL.ToLogStr str => Handle -> str -> IO ()
-info h = FL.pushLogStrLn (hLoggerSet h) . FL.toLogStr
+debug, info, warning, error :: FL.ToLogStr str => Handle -> str -> IO ()
+debug   h = log h Debug
+info    h = log h Info
+warning h = log h Warning
+error   h = log h Error
+
+debug', info', warning', error' :: Handle -> String -> IO ()
+debug'   = debug
+info'    = info
+warning' = warning
+error'   = error

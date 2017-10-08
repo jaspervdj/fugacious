@@ -164,7 +164,7 @@ getUserByAddress h address = Pool.withResource (hPool h) $ \conn -> do
 
 getExpiredUsers :: Handle -> IO [User]
 getExpiredUsers h = Pool.withResource (hPool h) $ \conn -> do
-    now   <- Time.getCurrentTime
+    now <- Time.getCurrentTime
     Postgres.query conn
         "SELECT id, address, token, expires FROM users WHERE expires < ?"
         (Postgres.Only now)

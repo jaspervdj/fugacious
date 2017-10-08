@@ -80,7 +80,7 @@ run configPath = do
         Web.withHandle webConfig logger db $ \web ->
         MailQueue.withHandles queueConfigs logger $ \mailQueues ->
         Async.withAsync (popThread logger db mailQueues) $ \_ ->
-        Async.withAsync (janitorThread db) $ \_ ->
+        Async.withAsync (janitorThread logger db) $ \_ ->
             Web.run web
 
 popThread :: Logger.Handle -> Database.Handle -> [MailQueue.Handle] -> IO ()
@@ -89,7 +89,7 @@ popThread logger db queues = forever $ do
     forM_ queues $ \queue ->
         gracefully logger "Could not pop queue" $
         MailQueue.pop queue $ \source -> do
-            Logger.info logger ("Popped an email." :: String)
+            Logger.debug' logger "Popped an email."
             case parseMail source of
                 Left err -> Logger.error logger err
                 Right pm -> gracefully logger "Could not deliver mail" $ do
@@ -97,11 +97,13 @@ popThread logger db queues = forever $ do
                     void $ Database.deliverMail
                         db (pmFrom pm) (pmTo pm) (pmSubject pm) source
 
-janitorThread :: Database.Handle -> IO ()
-janitorThread db = forever $ do
+janitorThread :: Logger.Handle -> Database.Handle -> IO ()
+janitorThread logger db = forever $ do
     threadDelay $ 60 * 1000 * 1000
     expired <- Database.getExpiredUsers db
-    forM_ expired $ \user -> Database.purgeUser db user
+    forM_ expired $ \user -> do
+        Logger.debug logger $ "Purging user " <> Database.uAddress user
+        Database.purgeUser db user
 
 gracefully :: Logger.Handle -> String -> IO () -> IO ()
 gracefully logger prefix action = do
