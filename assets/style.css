@@ -39,8 +39,19 @@ form.login {
     margin: 24px;
 }
 
-form.logout {
+div.controls {
     float: right;
+}
+
+div.controls form {
+    display: inline;
+    margin-left: 12px;
+}
+
+div.body {
+    border: 1px dashed #555;
+    margin: 12px 0px 12px 0px;
+    padding: 0px 12px 0px 12px;
 }
 
 input {

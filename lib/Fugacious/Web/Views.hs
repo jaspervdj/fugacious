@@ -48,17 +48,31 @@ index domain = template "Home" $ do
         " "
         H.input ! A.type_ "submit" ! A.value "Claim"
 
+userHeader
+    :: Time.UTCTime
+    -> Database.User
+    -> H.Html
+    -> H.Html
+userHeader now user controls = H.p $ do
+    H.div ! A.class_ "controls" $ controls
+    "Signed in as "
+    H.code (H.toHtml (Database.uAddress user))
+    " - "
+    "your account expires in "
+    H.em $ H.toHtml minutes
+    " minutes"
+  where
+    minutes :: Int
+    minutes = floor $
+        toRational (Database.uExpires user `Time.diffUTCTime` now) / 60
+
 inbox :: Time.UTCTime -> Database.User -> [Database.Mail] -> Html
 inbox now user emails = template (Database.uAddress user <> " - fugacious") $ do
-    H.p $ do
-        H.form ! A.class_ "logout" ! A.action logout ! A.method "POST" $
+    userHeader now user $ do
+        H.form ! A.action refresh ! A.method "GET" $
+            H.input ! A.type_ "submit" ! A.value "Refresh"
+        H.form ! A.action logout ! A.method "POST" $
             H.input ! A.type_ "submit" ! A.value "Logout"
-        "Signed in as "
-        H.code (H.toHtml (Database.uAddress user))
-        " - "
-        "your account expires in "
-        H.em $ H.toHtml minutes
-        " minutes"
     H.h1 "Inbox"
     if null emails
         then H.p $ do
@@ -77,18 +91,22 @@ inbox now user emails = template (Database.uAddress user <> " - fugacious") $ do
         "/inbox/" <> H.toValue (Database.uId user) <> "/" <>
         H.toValue (Database.mId msg)
 
+    refresh =
+        "/inbox/" <> H.toValue (Database.uId user) <> "/"
+
     logout =
         "/users/" <> H.toValue (Database.uId user) <> "/logout"
 
-    minutes :: Int
-    minutes = floor $
-        toRational (Database.uExpires user `Time.diffUTCTime` now) / 60
-
-mail :: Database.User -> ParsedMail -> Html
-mail user msg = template (Database.uAddress user <> " - fugacious") $ do
-    H.p $ "Welcome " <> H.toHtml (Database.uAddress user)
+mail :: Time.UTCTime -> Database.User -> ParsedMail -> Html
+mail now user msg = template (Database.uAddress user <> " - fugacious") $ do
+    userHeader now user $ do
+            H.form ! A.action toInbox ! A.method "GET" $
+                H.input ! A.type_ "submit" ! A.value "Back"
+    H.h1 $ H.toHtml $ pmSubject msg
     H.p $ do
+        "From "
         H.toHtml (pmFrom msg)
-        " - "
-        H.toHtml (pmSubject msg)
-    H.div $ H.a ! A.class_ "body" $ H.pre $ H.code $ H.toHtml $ pmBody msg
+    H.div ! A.class_ "body" $ H.pre $ H.code $ H.toHtml $ pmBody msg
+  where
+    toInbox =
+        "/inbox/" <> H.toValue (Database.uId user) <> "/"

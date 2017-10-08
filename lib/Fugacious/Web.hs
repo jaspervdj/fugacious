@@ -144,11 +144,12 @@ getInboxMail = handleExceptions $ do
     user  <- authorize
     id_   <- Snap.requireParam "mail"
     db    <- asks hDatabase
+    now   <- liftIO $ Time.getCurrentTime
     mail  <- liftIO $ Database.getMailById db id_
     pmail <- case ParseMail.parseMail (Database.mSource mail) of
         Left  err -> Snap.throw500 $ "Could not parser mail: " ++ err
         Right x   -> return x
-    Snap.blaze $ Views.mail user pmail
+    Snap.blaze $ Views.mail now user pmail
 
 authorize :: FugaciousM Database.User
 authorize = do

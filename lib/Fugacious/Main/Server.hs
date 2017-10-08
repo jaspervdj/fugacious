@@ -102,7 +102,7 @@ janitorThread logger db = forever $ do
     threadDelay $ 60 * 1000 * 1000
     expired <- Database.getExpiredUsers db
     forM_ expired $ \user -> do
-        Logger.debug logger $ "Purging user " <> Database.uAddress user
+        Logger.info logger $ "Purging user " <> Database.uAddress user
         Database.purgeUser db user
 
 gracefully :: Logger.Handle -> String -> IO () -> IO ()

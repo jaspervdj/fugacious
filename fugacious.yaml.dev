@@ -1,12 +1,13 @@
 database:
   connection_string: "dbname='fugacious'"
+  verbosity: info
 
 web:
   port: 8000
-  mail_domain: "localhost"
+  mail_domain: "kilobit.ch"
   web_domain: "localhost"
   user_lifetime: 600
 
 mail_queues:
-  - type: spool
-    path: "/var/spool/mail/jasper"
+  - type: amazon
+    queue_url: "https://sqs.us-east-1.amazonaws.com/622401240280/fgcs2-queue"
