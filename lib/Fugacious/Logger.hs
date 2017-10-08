@@ -6,6 +6,7 @@ module Fugacious.Logger
     , withHandle
 
     , error
+    , info
     ) where
 
 import           Control.Exception       (bracket)
@@ -41,3 +42,6 @@ withHandle config f = bracket
 
 error :: FL.ToLogStr str => Handle -> str -> IO ()
 error h = FL.pushLogStrLn (hLoggerSet h) . FL.toLogStr
+
+info :: FL.ToLogStr str => Handle -> str -> IO ()
+info h = FL.pushLogStrLn (hLoggerSet h) . FL.toLogStr

@@ -21,11 +21,14 @@ fun new {
   name: String,
   region: Fugue.AWS.Region,
   network: Fugue.AWS.Pattern.Network.Network,
-  containerImage: String,
-  containerMemory: Optional<Int>,
-  containerManagedPolicies: List<Fugue.AWS.IAM.ManagedPolicy>,
-  containerLogGroupName: String,
+  appImage: String,
+  appPort: Optional<Int>,
+  appMemory: Optional<Int>,
+  appManagedPolicies: List<Fugue.AWS.IAM.ManagedPolicy>,
+  appLogGroupName: String,
 } -> AppCluster:
+  let _appPort: appPort ?| 8000
+
   # Security group for the cluster instances
   let sg: Fugue.AWS.EC2.SecurityGroup.new {
     vpc: network.vpc,
@@ -35,7 +38,7 @@ fun new {
         Fugue.AWS.EC2.IpPermission.Target.all
       ),
       Fugue.AWS.EC2.IpPermission.tcp(
-        8000,
+        _appPort,
         Fugue.AWS.EC2.IpPermission.Target.all
       )
     ]
@@ -46,7 +49,7 @@ fun new {
     loadBalancerName: name ++ "-web",
     subnets: network.publicSubnets,
     healthCheck: Fugue.AWS.ELB.HealthCheck.tcp {
-      port: 8000,
+      port: _appPort,
       interval: 15,
       timeout: 3,
       unhealthyThreshold: 3,
@@ -59,7 +62,7 @@ fun new {
         protocol: Fugue.AWS.ELB.HTTP,
         loadBalancerPort: 80,
         instanceProtocol: Fugue.AWS.ELB.HTTP,
-        instancePort: 8000,
+        instancePort: _appPort,
       },
     ],
   }
@@ -68,12 +71,12 @@ fun new {
   let containerName: name ++ "-container"
   let containerDefinition: Fugue.AWS.ECS.ContainerDefinition.new {
     name: containerName,
-    image: containerImage,
-    memory: containerMemory ?| 256,
+    image: appImage,
+    memory: appMemory ?| 256,
     portMappings: [
       Fugue.AWS.ECS.PortMapping.tcp {
-        containerPort: 8000,
-        hostPort: 8000
+        containerPort: _appPort,
+        hostPort: _appPort
       }
     ],
     # The awslogs smart constructor is currently not exported so we need to use
@@ -82,7 +85,7 @@ fun new {
       logDriver: Fugue.AWS.ECS.Awslogs,
       options: {
         "awslogs-region": Fugue.AWS.Region.toString(region),
-        "awslogs-group": containerLogGroupName
+        "awslogs-group": appLogGroupName
       }
     }
   }
@@ -121,6 +124,21 @@ fun new {
       Fugue.AWS.IAM.ManagedPolicy.external(
         "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole"
       ),
+    ],
+    rolePolicies: [
+      Fugue.AWS.IAM.Policy.new {
+        policyName: name ++ "-describe-instance-health",
+        policyDocument: '{
+          \  "Version": "2012-10-17",
+          \  "Statement": [
+          \    {
+          \      "Effect": "Allow",
+          \      "Action": "elasticloadbalancing:DescribeInstanceHealth",
+          \      "Resource": "*"
+          \    }
+          \  ]
+          \}'
+      }
     ]
   }
 
@@ -134,7 +152,7 @@ fun new {
           "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role"
         )
       ],
-      containerManagedPolicies
+      appManagedPolicies
     )
   }
 
@@ -146,7 +164,7 @@ fun new {
     role: serviceRole,
     loadBalancer: Fugue.AWS.ECS.LoadBalancer.classicLoadBalancer {
       containerName: containerName,
-      containerPort: 8000,
+      containerPort: _appPort,
       loadBalancer: elb
     },
     deploymentConfiguration: Fugue.AWS.ECS.DeploymentConfiguration {

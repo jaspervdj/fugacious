@@ -24,7 +24,7 @@ type Fugacious: {
 
 fun newFugacious {
   name: String,
-  containerLogGroupName: String,
+  appLogGroupName: String,
   region: Optional<Fugue.AWS.Region>,
 } -> Fugacious:
   let _region: region ?| Fugue.AWS.Us-east-1
@@ -80,13 +80,13 @@ fun newFugacious {
     name: name ++ "-app",
     region: _region,
     network: network,
-    containerImage: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",
-    containerManagedPolicies: [
+    appImage: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",
+    appManagedPolicies: [
       Fugue.AWS.IAM.ManagedPolicy.external(
         "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
       )
     ],
-    containerLogGroupName: containerLogGroupName,
+    appLogGroupName: appLogGroupName,
   }
 
   {
@@ -102,5 +102,5 @@ fun newFugacious {
 
 infra: newFugacious {
   name: "fgcs2",
-  containerLogGroupName: "fgcs2-logs"
+  appLogGroupName: "fgcs2-logs"
 }

@@ -85,13 +85,15 @@ run configPath = do
 
 popThread :: Logger.Handle -> Database.Handle -> [MailQueue.Handle] -> IO ()
 popThread logger db queues = forever $ do
-    threadDelay $ 10 * 1000 * 1000
+    threadDelay $ 30 * 1000 * 1000
     forM_ queues $ \queue ->
         gracefully logger "Could not pop queue" $
-        MailQueue.pop queue $ \source ->
+        MailQueue.pop queue $ \source -> do
+            Logger.info logger ("Popped an email." :: String)
             case parseMail source of
                 Left err -> Logger.error logger err
                 Right pm -> gracefully logger "Could not deliver mail" $ do
+                    Logger.info logger $ "Delivering to: " ++ show (pmTo pm)
                     void $ Database.deliverMail
                         db (pmFrom pm) (pmTo pm) (pmSubject pm) source
 
