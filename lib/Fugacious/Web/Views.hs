@@ -7,7 +7,9 @@ module Fugacious.Web.Views
     , mail
     ) where
 
+import           Control.Applicative         ((<|>))
 import           Control.Monad               (forM_)
+import           Data.Maybe                  (listToMaybe)
 import           Data.Monoid                 ((<>))
 import qualified Data.Text                   as T
 import qualified Data.Time                   as Time
@@ -18,6 +20,7 @@ import qualified Paths_fugacious
 import           Text.Blaze.Html             (Html, (!))
 import qualified Text.Blaze.Html5            as H
 import qualified Text.Blaze.Html5.Attributes as A
+import qualified Text.HTML.SanitizeXSS       as SanitizeXSS
 
 template :: T.Text -> Html -> Html
 template title body = H.docTypeHtml $ do
@@ -106,7 +109,18 @@ mail now user msg = template (Database.uAddress user <> " - fugacious") $ do
     H.p $ do
         "From "
         H.toHtml (pmFrom msg)
-    H.div ! A.class_ "body" $ H.pre $ H.code $ H.toHtml $ pmBody msg
+    H.div ! A.class_ "body" $ renderBody (pmBody msg)
   where
     toInbox =
         "/inbox/" <> H.toValue (Database.uId user) <> "/"
+
+    renderBody (PlainTextBody txt) = H.pre $ H.code $ H.toHtml txt
+    renderBody (HtmlBody txt) = H.preEscapedToHtml $
+        SanitizeXSS.sanitizeXSS $ txt
+    renderBody (MultipartBody parts) = case preferredPart parts of
+        Just b  -> renderBody b
+        Nothing -> "Empty multipart body"
+
+    preferredPart parts =
+        listToMaybe [b | b@(HtmlBody _) <- parts] <|>
+        listToMaybe [b | b@(PlainTextBody _) <- parts]
