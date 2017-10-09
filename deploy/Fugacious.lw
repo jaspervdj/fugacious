@@ -79,15 +79,19 @@ fun newFugacious {
 
   let cluster: AppCluster.new {
     name: name ++ "-app",
-    region: _region,
     network: network,
-    appImage: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",
-    appManagedPolicies: [
-      Fugue.AWS.IAM.ManagedPolicy.external(
-        "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
-      )
-    ],
-    appLogGroupName: appLogGroupName,
+    apps: [
+      AppCluster.app {
+        name: name ++ "-app",
+        image: "622401240280.dkr.ecr.us-east-1.amazonaws.com/fugacious:latest",
+        managedPolicies: [
+          Fugue.AWS.IAM.ManagedPolicy.external(
+            "arn:aws:iam::aws:policy/AmazonSQSFullAccess"
+          )
+        ],
+        logGroupName: appLogGroupName
+      }
+    ]
   }
 
   {
