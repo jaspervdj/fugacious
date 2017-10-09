@@ -14,6 +14,7 @@ module Fugacious.Database
     , getUserById
     , getExpiredUsers
     , purgeUser
+    , renewUser
 
     , Mail (..)
     , deliverMail
@@ -175,6 +176,11 @@ purgeUser h user = Pool.withResource (hPool h) $ \conn -> do
         "DELETE FROM users WHERE id = ?" (Postgres.Only (uId user))
     void $ Postgres.execute conn
         "DELETE FROM mails WHERE \"to\" = ?" (Postgres.Only (uAddress user))
+
+renewUser :: Handle -> User -> Time.UTCTime -> IO ()
+renewUser h user expires = Pool.withResource (hPool h) $ \conn -> do
+    void $ Postgres.execute conn
+        "UPDATE users SET expires = ? WHERE id = ?" (expires, uId user)
 
 data Mail = Mail
     { mId      :: T.Text

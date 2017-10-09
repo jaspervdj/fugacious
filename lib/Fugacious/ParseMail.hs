@@ -21,8 +21,8 @@ import qualified Data.MBox                   as MBox
 import qualified Data.Text                   as T
 import qualified Data.Text.Lazy              as TL
 import qualified Data.Text.Lazy.Encoding     as TL
-import           Debug.Trace
 import qualified Network.Multipart           as Multipart
+import qualified Network.QuotedPrintable     as QuotedPrintable
 
 data ParsedMail = ParsedMail
     { pmSubject :: !T.Text
@@ -37,6 +37,15 @@ data MailBody
     | MultipartBody [MailBody]
     deriving (Show)
 
+flattenMultiparts :: MailBody -> MailBody
+flattenMultiparts (PlainTextBody b)  = PlainTextBody b
+flattenMultiparts (HtmlBody      b)  = HtmlBody b
+flattenMultiparts (MultipartBody ps) = MultipartBody (concatMap toList ps)
+  where
+    toList (PlainTextBody b)  = [PlainTextBody b]
+    toList (HtmlBody      b)  = [HtmlBody b]
+    toList (MultipartBody xs) = concatMap toList xs
+
 parseMail :: T.Text -> Either String ParsedMail
 parseMail source = do
     msg       <- case MBox.parseMBox (TL.fromStrict source) of
@@ -45,7 +54,8 @@ parseMail source = do
     pmFrom    <- getHeader "From"    msg
     pmTo      <- getHeader "To"      msg
     pmSubject <- getHeader "Subject" msg
-    pmBody    <- parseMailBody (headers msg) (MBox.body msg)
+    pmBody    <- fmap flattenMultiparts $
+        parseMailBody (headers msg) (MBox.body msg)
     return ParsedMail {..}
   where
     lookupHeader key =
@@ -79,8 +89,7 @@ parseMailBody headers ebody
         dbody <- contentTransferDecode ebody
         let Multipart.MultiPart parts =
                 Multipart.parseMultipartBody boundary (TL.encodeUtf8 dbody)
-        let trace' x = traceShow x x
-        return $ MultipartBody $ snd $ trace' $ partitionEithers
+        return $ MultipartBody $ snd $ partitionEithers
             [ parseMailBody pheaders (TL.decodeUtf8 pbody)
             | Multipart.BodyPart pheaders pbody <- parts
             ]
@@ -112,8 +121,9 @@ parseMailBody headers ebody
 
     contentTransferDecode :: TL.Text -> Either String TL.Text
     contentTransferDecode plain = case contentTransferEncoding of
-        Nothing       -> Right plain
+        Nothing -> Right plain
         Just "base64" ->
             fmap TL.decodeUtf8 $ Base64.decode $ TL.encodeUtf8 $
             TL.filter (not . isSpace) plain
-        Just _        -> Left "Unsupported Content-Transfer-Encoding"
+        Just "quoted-printable" -> Right $ QuotedPrintable.decode plain
+        Just _ -> Left "Unsupported Content-Transfer-Encoding"

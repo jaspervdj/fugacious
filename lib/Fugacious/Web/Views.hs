@@ -62,16 +62,18 @@ userHeader now user controls = H.p $ do
     H.code (H.toHtml (Database.uAddress user))
     " - "
     "your account expires in "
-    H.em $ H.toHtml minutes
+    H.em $ H.toHtml (max 0 minutes)
     " minutes"
   where
     minutes :: Int
-    minutes = floor $
+    minutes = round $
         toRational (Database.uExpires user `Time.diffUTCTime` now) / 60
 
 inbox :: Time.UTCTime -> Database.User -> [Database.Mail] -> Html
 inbox now user emails = template (Database.uAddress user <> " - fugacious") $ do
     userHeader now user $ do
+        H.form ! A.action renew ! A.method "POST" $
+            H.input ! A.type_ "submit" ! A.value "Renew"
         H.form ! A.action refresh ! A.method "GET" $
             H.input ! A.type_ "submit" ! A.value "Refresh"
         H.form ! A.action logout ! A.method "POST" $
@@ -100,8 +102,11 @@ inbox now user emails = template (Database.uAddress user <> " - fugacious") $ do
     logout =
         "/users/" <> H.toValue (Database.uId user) <> "/logout"
 
-mail :: Time.UTCTime -> Database.User -> ParsedMail -> Html
-mail now user msg = template (Database.uAddress user <> " - fugacious") $ do
+    renew =
+        "/users/" <> H.toValue (Database.uId user) <> "/renew"
+
+mail :: Time.UTCTime -> Database.User -> T.Text -> ParsedMail -> Html
+mail now user msgId msg = template (Database.uAddress user <> " - fugacious") $ do
     userHeader now user $ do
             H.form ! A.action toInbox ! A.method "GET" $
                 H.input ! A.type_ "submit" ! A.value "Back"
@@ -110,9 +115,14 @@ mail now user msg = template (Database.uAddress user <> " - fugacious") $ do
         "From "
         H.toHtml (pmFrom msg)
     H.div ! A.class_ "body" $ renderBody (pmBody msg)
+    H.p $ H.a ! A.href source $ "view source"
   where
     toInbox =
         "/inbox/" <> H.toValue (Database.uId user) <> "/"
+
+    source =
+        "/inbox/" <> H.toValue (Database.uId user) <> "/" <>
+        H.toValue msgId <> "?source"
 
     renderBody (PlainTextBody txt) = H.pre $ H.code $ H.toHtml txt
     renderBody (HtmlBody txt) = H.preEscapedToHtml $

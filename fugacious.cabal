@@ -36,6 +36,7 @@ Library
     Fugacious.Main.Server
     Fugacious.Web
     Fugacious.Web.Views
+    Network.QuotedPrintable
     Paths_fugacious
     Snap.Core.Extended
     System.FileLock.Extended

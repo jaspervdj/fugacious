@@ -88,6 +88,7 @@ app = Snap.route
     [ ("",                    Snap.ifTop index)
     , ("/users",              Snap.method Snap.POST postUsers)
     , ("/users/:user/logout", Snap.method Snap.POST postUsersLogout)
+    , ("/users/:user/renew",  Snap.method Snap.POST postUsersRenew)
     , ("/inbox/:user",        Snap.ifTop getInbox)
     , ("/inbox/:user/:mail",  getInboxMail)
     , ("/assets/style.css",   Snap.serveFile "assets/style.css")
@@ -98,18 +99,21 @@ index = handleExceptions $ do
     mailDomain <- askMailDomain
     Snap.blaze $ Views.index mailDomain
 
+expirationFromNow :: FugaciousM Time.UTCTime
+expirationFromNow = do
+    lifetime   <- askUserLifetime
+    now <- liftIO Time.getCurrentTime
+    return $ Time.addUTCTime (fromIntegral lifetime) now
+
 postUsers :: FugaciousM ()
 postUsers = handleExceptions $ do
     address    <- Snap.requireParam "address"
     webDomain  <- askWebDomain
     mailDomain <- askMailDomain
-    lifetime   <- askUserLifetime
     db         <- asks hDatabase
 
-    now <- liftIO Time.getCurrentTime
-    let expires = Time.addUTCTime (fromIntegral lifetime) now
-
-    user <- liftIO $ Database.createUser db (address <> "@" <> mailDomain) expires
+    expires <- expirationFromNow
+    user    <- liftIO $ Database.createUser db (address <> "@" <> mailDomain) expires
 
     let cookie = Snap.Cookie
             { Snap.cookieName     = "user"
@@ -131,6 +135,14 @@ postUsersLogout = handleExceptions $ do
     liftIO $ Database.purgeUser db user
     Snap.redirect "/"
 
+postUsersRenew :: FugaciousM ()
+postUsersRenew = handleExceptions $ do
+    user    <- authorize
+    db      <- asks hDatabase
+    expires <- expirationFromNow
+    liftIO $ Database.renewUser db user expires
+    Snap.redirect $ "/inbox/" <> T.encodeUtf8 (Database.uId user)
+
 getInbox :: FugaciousM ()
 getInbox = handleExceptions $ do
     user   <- authorize
@@ -146,10 +158,15 @@ getInboxMail = handleExceptions $ do
     db    <- asks hDatabase
     now   <- liftIO $ Time.getCurrentTime
     mail  <- liftIO $ Database.getMailById db id_
-    pmail <- case ParseMail.parseMail (Database.mSource mail) of
-        Left  err -> Snap.throw500 $ "Could not parser mail: " ++ err
-        Right x   -> return x
-    Snap.blaze $ Views.mail now user pmail
+
+    sourceParam <- Snap.getParam "source"
+    case sourceParam of
+        Just _  -> Snap.plainText $ Database.mSource mail
+        Nothing -> do
+            pmail <- case ParseMail.parseMail (Database.mSource mail) of
+                Left  err -> Snap.throw500 $ "Could not parser mail: " ++ err
+                Right x   -> return x
+            Snap.blaze $ Views.mail now user (Database.mId mail) pmail
 
 authorize :: FugaciousM Database.User
 authorize = do

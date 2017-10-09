@@ -8,11 +8,12 @@ module Snap.Core.Extended
     , throw400
     , throw500
     , throwError
+
+    , plainText
     ) where
 
 import qualified Data.ByteString    as B
 import           Data.Int           (Int64)
-import           Data.Monoid        ((<>))
 import qualified Data.Text          as T
 import qualified Data.Text.Encoding as T
 import           Snap.Core
@@ -49,3 +50,8 @@ throwError code message reason = do
         show code ++ " " ++ message ++ ": " ++ reason
     r <- getResponse
     finishWith r
+
+plainText :: MonadSnap m => T.Text -> m ()
+plainText text = do
+    modifyResponse $ addHeader "Content-Type" "text/plain; charset=UTF-8"
+    writeBS $ T.encodeUtf8 text
