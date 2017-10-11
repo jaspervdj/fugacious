@@ -1,14 +1,16 @@
 database:
   connection_string: "host=fgcs2-database.csrfbk8qsfyx.us-east-1.rds.amazonaws.com port=5432 dbname=fugacious user=master password=12345678"
 
-janitor:
-  interval: 120
+logger:
+  verbosity: info
+
+user:
+  domain: "kilobit.ch"
+  lifetime: 600
 
 web:
   port: 8000
-  mail_domain: "kilobit.ch"
-  web_domain: "www.kilobit.ch"
-  user_lifetime: 600
+  domain: "www.kilobit.ch"
 
 mail_queues:
   - type: amazon

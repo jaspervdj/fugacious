@@ -1,29 +1,32 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Fugacious.Main.Server
     ( Config (..)
 
     , main
     ) where
 
-import           Control.Concurrent         (threadDelay)
-import qualified Control.Concurrent.Async   as Async
-import           Control.Monad              (forM_, forever, void)
-import qualified Data.Aeson                 as A
-import           Data.Monoid                ((<>))
-import           Data.Version               (showVersion)
-import qualified Data.Yaml                  as Yaml
-import qualified Fugacious.Database         as Database
-import qualified Fugacious.Logger           as Logger
-import qualified Fugacious.MailQueue        as MailQueue
+import           Control.Concurrent       (threadDelay)
+import qualified Control.Concurrent.Async as Async
+import           Control.Monad            (forM_, forever, void)
+import qualified Data.Aeson               as A
+import           Data.Monoid              ((<>))
+import           Data.Version             (showVersion)
+import qualified Data.Yaml                as Yaml
+import qualified Fugacious.Database       as Database
+import qualified Fugacious.Logger         as Logger
+import qualified Fugacious.MailQueue      as MailQueue
 import           Fugacious.ParseMail
-import qualified Fugacious.Web              as Web
+import qualified Fugacious.User           as User
+import qualified Fugacious.Web            as Web
 import qualified Paths_fugacious
-import           System.Environment         (getArgs, getProgName)
-import           System.Exit                (exitFailure)
-import qualified System.IO                  as IO
+import           System.Environment       (getArgs, getProgName)
+import           System.Exit              (exitFailure)
+import qualified System.IO                as IO
 
 data Config = Config
     { cLogger     :: Logger.Config
+    , cUser       :: User.Config
     , cWeb        :: Web.Config
     , cDatabase   :: Database.Config
     , cMailQueues :: [MailQueue.Config]
@@ -32,6 +35,7 @@ data Config = Config
 instance Monoid Config where
     mempty = Config
         { cLogger     = mempty
+        , cUser       = mempty
         , cWeb        = mempty
         , cDatabase   = mempty
         , cMailQueues = mempty
@@ -39,6 +43,7 @@ instance Monoid Config where
 
     mappend l r = Config
         { cLogger     = cLogger     l <> cLogger     r
+        , cUser       = cUser       l <> cUser       r
         , cWeb        = cWeb        l <> cWeb        r
         , cDatabase   = cDatabase   l <> cDatabase   r
         , cMailQueues = cMailQueues l <> cMailQueues r
@@ -48,6 +53,7 @@ instance A.FromJSON Config where
     parseJSON = A.withObject "FromJSON Fugacious.Main.Server.Config" $ \o ->
         Config
             <$> o A..:? "logger"      A..!= mempty
+            <*> o A..:? "user"        A..!= mempty
             <*> o A..:? "web"         A..!= mempty
             <*> o A..:? "database"    A..!= mempty
             <*> o A..:? "mail_queues" A..!= mempty
@@ -68,17 +74,12 @@ run configPath = do
         "Booting fugacious v" ++ showVersion Paths_fugacious.version
 
     errOrConfig <- Yaml.decodeFileEither configPath
-    config      <- either (fail . show) return errOrConfig
+    Config {..} <- either (fail . show) return errOrConfig
 
-    let loggerConfig  = cLogger     config
-        dbConfig      = cDatabase   config
-        webConfig     = cWeb        config
-        queueConfigs  = cMailQueues config
-
-    Logger.withHandle loggerConfig $ \logger ->
-        Database.withHandle dbConfig $ \db ->
-        Web.withHandle webConfig logger db $ \web ->
-        MailQueue.withHandles queueConfigs logger $ \mailQueues ->
+    Logger.withHandle cLogger $ \logger ->
+        Database.withHandle cDatabase $ \db ->
+        Web.withHandle cWeb cUser logger db $ \web ->
+        MailQueue.withHandles cMailQueues logger $ \mailQueues ->
         Async.withAsync (popThread logger db mailQueues) $ \_ ->
         Async.withAsync (janitorThread logger db) $ \_ ->
             Web.run web

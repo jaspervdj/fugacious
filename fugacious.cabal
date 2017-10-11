@@ -26,15 +26,17 @@ Library
     Data.Either.Fail
     Data.MBox.Extended
     Fugacious.Database
+    Fugacious.Logger
     Fugacious.MailQueue
     Fugacious.MailQueue.Amazon
     Fugacious.MailQueue.Internal
     Fugacious.MailQueue.Spool
     Fugacious.Main.Sendmail
-    Fugacious.ParseMail
-    Fugacious.Logger
     Fugacious.Main.Server
+    Fugacious.ParseMail
+    Fugacious.User
     Fugacious.Web
+    Fugacious.Web.Routes
     Fugacious.Web.Views
     Network.QuotedPrintable
     Paths_fugacious

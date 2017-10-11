@@ -39,6 +39,10 @@ form.login {
     margin: 24px;
 }
 
+form.login input {
+    margin-bottom: 12px;
+}
+
 div.controls {
     float: right;
 }

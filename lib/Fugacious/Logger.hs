@@ -17,10 +17,10 @@ module Fugacious.Logger
     , error'
     ) where
 
+import           Control.Applicative   (Alternative (..))
 import           Control.Exception     (bracket)
 import qualified Data.Aeson            as A
 import           Data.Maybe            (fromMaybe)
-import           Data.Monoid           (Last (..), (<>))
 import qualified Data.Text             as T
 import           Prelude               hiding (error, log)
 import qualified System.Log.FastLogger as FL
@@ -42,18 +42,18 @@ instance A.FromJSON Verbosity where
             _         -> fail $ "Unknown verbosity: " ++ T.unpack t
 
 data Config = Config
-    { cPath      :: Last FilePath
-    , cVerbosity :: Last Verbosity
+    { cPath      :: Maybe FilePath
+    , cVerbosity :: Maybe Verbosity
     } deriving (Show)
 
 instance Monoid Config where
-    mempty                              = Config mempty mempty
-    Config p0 v0 `mappend` Config p1 v1 = Config (p0 <> p1) (v0 <> v1)
+    mempty                              = Config empty empty
+    Config p0 v0 `mappend` Config p1 v1 = Config (p0 <|> p1) (v0 <|> v1)
 
 instance A.FromJSON Config where
     parseJSON = A.withObject "FromJSON Fugacious.Logger.Config" $ \o -> Config
-        <$> o A..: "path"
-        <*> o A..: "verbosity"
+        <$> o A..:? "path"
+        <*> o A..:? "verbosity"
 
 data Handle = Handle
     { hConfig    :: Config
@@ -62,7 +62,7 @@ data Handle = Handle
 
 withHandle :: Config -> (Handle -> IO a) -> IO a
 withHandle config f = bracket
-    (case getLast (cPath config) of
+    (case cPath config of
         Nothing   -> FL.newStderrLoggerSet FL.defaultBufSize
         Just "-"  -> FL.newStderrLoggerSet FL.defaultBufSize
         Just path -> FL.newFileLoggerSet FL.defaultBufSize path)
@@ -74,7 +74,7 @@ log Handle {..} v x
     | v >= verbosity = FL.pushLogStrLn hLoggerSet $ FL.toLogStr x
     | otherwise      = return ()
   where
-    verbosity = fromMaybe Debug (getLast $ cVerbosity hConfig)
+    verbosity = fromMaybe Debug (cVerbosity hConfig)
 
 debug, info, warning, error :: FL.ToLogStr str => Handle -> str -> IO ()
 debug   h = log h Debug
