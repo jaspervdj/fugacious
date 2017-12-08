@@ -5,12 +5,12 @@ logger:
   verbosity: info
 
 user:
-  domain: "kilobit.ch"
+  domain: "fg.jaspervdj.be"
   lifetime: 600
 
 web:
   port: 8000
-  domain: "www.kilobit.ch"
+  domain: "fugacious.jaspervdj.be"
 
 mail_queues:
   - type: amazon
