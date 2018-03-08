@@ -18,7 +18,7 @@ However, it is also an exercise in going the other way and writing all pieces of
 boilerplate and glue.  As such, it is a rather boring¹ codebase.
 
 The codebase tries to relentlessly follow good² practices, as I've learned them
-over a good amount of years.  Despite that, it is a simple codebase.  Whenever I
+over a good amount of years.  Despite that, it is a simple codebase.  Whenever
 there is a choice between patterns, I attempt to choose the simplest one that
 works.
 
